@@ -19,9 +19,18 @@ import time
 
 from .tasks import send_order_confirmation
 
+from drf_spectacular.utils import extend_schema, OpenApiParameter
+
 
 
 class OrderCreateView(APIView):
+   
+    @extend_schema(
+        summary="Create Order",
+        description="Creates an order for a store. Auto CONFIRMED or REJECTED based on stock.",
+        request=OrderCreateSerializer,
+        responses={201: OrderOutputSerializer, 200: OrderOutputSerializer},
+    )
 
     def post(self, request):
         # --- Step 1: Validate incoming data ---
@@ -140,6 +149,15 @@ class OrderCreateView(APIView):
 
 
 class StoreOrderListView(APIView):
+    @extend_schema(
+        summary="List Store Orders",
+        description="Returns all orders for a store sorted by newest first.",
+        responses={200: OrderListSerializer(many=True)},
+        parameters=[
+            OpenApiParameter("store_id", int, OpenApiParameter.PATH,
+                           description="Store ID"),
+        ]
+    )
 
     def get(self, request, store_id):
 
@@ -164,6 +182,12 @@ class StoreOrderListView(APIView):
 
     
 class StoreInventoryListView(APIView):
+
+    @extend_schema(
+        summary="Store Inventory",
+        description="Returns all inventory items for a store sorted alphabetically.",
+        responses={200: InventoryListSerializer(many=True)},
+    )
 
     def get(self, request, store_id):
         store = get_object_or_404(Store, id=store_id)
@@ -213,6 +237,23 @@ class StoreInventoryListView(APIView):
 
 
 class ProductSearchView(APIView):
+
+    @extend_schema(
+        summary="Search Products",
+        description="Full product search with filters, sorting and pagination.",
+        responses={200: ProductSearchSerializer(many=True)},
+        parameters=[
+            OpenApiParameter("q",         str, description="Search keyword"),
+            OpenApiParameter("category",  str, description="Filter by category name"),
+            OpenApiParameter("price_min", float, description="Minimum price"),
+            OpenApiParameter("price_max", float, description="Maximum price"),
+            OpenApiParameter("store_id",  int, description="Store ID for stock quantity"),
+            OpenApiParameter("in_stock",  str, description="true or false"),
+            OpenApiParameter("sort_by",   str, description="price_asc, price_desc, newest, relevance"),
+            OpenApiParameter("page",      int, description="Page number"),
+            OpenApiParameter("page_size", int, description="Results per page"),
+        ]
+    )
 
     def get(self, request):
 
@@ -340,8 +381,8 @@ class ProductSearchView(APIView):
 class ProductSuggestView(APIView):
 
     # ── Rate limit settings ───────────────────────────────────────────────
-    RATE_LIMIT    = 20    # max requests
-    RATE_WINDOW   = 60   # per 60 seconds
+    RATE_LIMIT  = 20
+    RATE_WINDOW = 60
 
     def get_client_ip(self, request):
         """Extract real IP even behind proxies"""
@@ -351,24 +392,27 @@ class ProductSuggestView(APIView):
         return request.META.get("REMOTE_ADDR")
 
     def is_rate_limited(self, ip):
-        cache_key = f"rate_limit_suggest_{ip}"
-        now       = int(time.time())
-        window    = self.RATE_WINDOW
-
-        # Get existing request log for this IP
+        cache_key     = f"rate_limit_suggest_{ip}"
+        now           = int(time.time())
+        window        = self.RATE_WINDOW
         request_times = cache.get(cache_key, [])
-
-        # Filter — keep only timestamps within the current window
         request_times = [t for t in request_times if now - t < window]
 
         if len(request_times) >= self.RATE_LIMIT:
-            return True  # limit exceeded
+            return True
 
-        # Log this request timestamp
         request_times.append(now)
         cache.set(cache_key, request_times, timeout=window)
         return False
 
+    @extend_schema(
+        summary="Autocomplete Suggest",
+        description="Returns up to 10 product title suggestions. Min 3 chars. Rate limited to 20 req/min.",
+        responses={200: None},
+        parameters=[
+            OpenApiParameter("q", str, description="Search prefix (min 3 characters)"),
+        ]
+    )
     def get(self, request):
         # ── Rate limiting check ───────────────────────────────────────────
         ip = self.get_client_ip(request)
@@ -376,8 +420,8 @@ class ProductSuggestView(APIView):
         if self.is_rate_limited(ip):
             return Response(
                 {
-                    "error":   "Rate limit exceeded.",
-                    "message": "Max 20 requests per minute allowed.",
+                    "error":       "Rate limit exceeded.",
+                    "message":     "Max 20 requests per minute allowed.",
                     "retry_after": "60 seconds"
                 },
                 status=status.HTTP_429_TOO_MANY_REQUESTS

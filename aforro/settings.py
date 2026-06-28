@@ -32,7 +32,9 @@ INSTALLED_APPS = [
     'django.contrib.messages',
     'django.contrib.staticfiles',
     'rest_framework',
+    'drf_spectacular',
     'inventory',
+    # ← add this
 ]
 
 MIDDLEWARE = [
@@ -110,3 +112,16 @@ CELERY_ACCEPT_CONTENT    = ["json"]
 CELERY_TASK_SERIALIZER   = "json"
 CELERY_RESULT_SERIALIZER = "json"
 CELERY_TIMEZONE          = "Asia/Karachi"
+
+
+
+# ── Swagger / OpenAPI ──────────────────────────────────────────────────────
+REST_FRAMEWORK = {
+    'DEFAULT_SCHEMA_CLASS': 'drf_spectacular.openapi.AutoSchema',
+}
+
+SPECTACULAR_SETTINGS = {
+    'TITLE':       'Aforro Backend API',
+    'DESCRIPTION': 'Inventory and Order Management System for Aforro',
+    'VERSION':     '1.0.0',
+}
